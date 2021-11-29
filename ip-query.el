@@ -1,4 +1,5 @@
 ;;; ip-query.el --- IP query tool
+;; Copyright (C) 2021 by Stephen Fromm
 
 ;; Author: Stephen Fromm
 ;; URL: https://github.com/sfromm/ip-query
