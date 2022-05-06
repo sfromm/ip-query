@@ -28,51 +28,61 @@
 ;;; Code:
 
 (require 'dns)
+(require 'rx)
 
 (defconst ip-query-ipv4-length 32 "Max IPv4 length.")
 
 (defconst ip-query-ipv6-length 128 "Max IPv6 length.")
 
 (defconst ip-query-keywords-regex
-  (concat
-   "^"
-   (regexp-opt
-    '("Address" "Netmask" "Wildcard"
-      "HostMin" "HostMax" "Network"
-      "Broadcast" "Hosts/Net") 'words))
-  "Regular expressions for IP Query.")
+  (rx (syntax open-parenthesis) (group (1+ alpha)) space)
+  "Regular expression for IP Query keywords.")
+
+(defconst ip-query-values-regex
+  (rx (syntax string-quote) (group (1+ print)) (syntax string-quote))
+  "Regular expression for IP Query values.")
+
+(defgroup ip-query nil
+  "Watcher."
+  :group 'net-utils)
 
 (defcustom ip-query-font-lock-keywords
   (list
-   (list ip-query-keywords-regex 0 font-lock-keyword-face))
-  "Default expressions to highlight in ipquery mode."
+   (list ip-query-keywords-regex 0 font-lock-builtin-face)
+   (list ip-query-values-regex 0 font-lock-string-face))
+  "Default expressions to highlight in ip-query mode."
   :type 'sexp
-  :group 'net-utils)
-
-
+  :group 'ip-query)
 ;;
-;; Mode
-;;
-
 (defvar ip-query-buffer-name "*ip-query*" "Name of buffer to run IP query.")
 
-(defvar ipquery-mode-map
+(defvar ip-query-mode-map
   (let ((map (make-sparse-keymap)))
-    (suppress-keymap map)
+    (define-key map "a" 'ip-query-asn)
+    (define-key map "n" 'ip-query)
+    (define-key map "/" 'ip-query)
     (define-key map "q" 'ip-query-exit)
-    map))
+    (define-key map (kbd "DEL") 'ip-query-erase-buffer)
+    (define-key map (kbd "<") 'ip-query-first)
+    (define-key map (kbd ">") 'ip-query-last)
+    map)
+  "Keymap for ip-query mode.")
 
-(define-derived-mode ip-query-mode fundamental-mode "IP-Query"
+(define-derived-mode ip-query-mode special-mode "IP-Query"
   "Major mode for displaying IP output."
+  :group 'ip-query
   (buffer-disable-undo)
-  (set (make-local-variable 'font-lock-defaults) '(ip-query-font-lock-keywords))
+  (read-only-mode -1)
+  (when (fboundp 'page-break-lines-mode)
+    (page-break-lines-mode))
+  (setq-local font-lock-defaults '(ip-query-font-lock-keywords t))
   (when (featurep 'font-lock)
     (font-lock-set-defaults)))
 
 (defun ip-query-exit ()
   "Bury ip-query output buffer."
   (interactive)
-  (quit-window (current-buffer)))
+  (quit-window (get-buffer ip-query-buffer-name)))
 
 (defun ip-query-get-buffer ()
   "Get the ip-query buffer."
@@ -81,16 +91,27 @@
       (ip-query-mode))
     buffer))
 
+(defun ip-query-first ()
+  "Go to beginning of ip-query buffer."
+  (interactive)
+  (goto-char (point-min)))
+
 (defun ip-query-last ()
-  "Go to end of ipquery buffer."
+  "Go to end of ip-query buffer."
   (interactive)
   (goto-char (point-max)))
+
+(defun ip-query-erase-buffer ()
+  "Erase ip-query buffer."
+  (interactive)
+  (with-current-buffer (ip-query-get-buffer)
+    (erase-buffer)))
+
 
 
 ;;
 ;; Functions
 ;;
-
 (defun ip-query--dns-cymru-txt-query (name)
   "Look up a TXT RR NAME from Cymru and return the split result."
   (let* ((answer (dns-query name 'TXT)))
@@ -110,24 +131,10 @@
   "Return IP in reversed format, typically for doing DNS PTR lookups."
   (mapconcat 'identity (nreverse (split-string ip "\\.")) "."))
 
-(defun ip-query-asn (asn)
-  "Query for an Autonomous System ASN."
-  (interactive "sASN: ")
-  (let* ((result (ip-query--dns-cymru-txt-query (concat "AS" asn ".asn.cymru.com")))
-         (answer nil))
-    (when result
-      (setq answer (list (list 'asn (nth 0 result))
-                         (list 'country (nth 1 result))
-                         (list 'rir (nth 2 result))
-                         (list 'name (nth 4 result))))
-      (when (called-interactively-p 'interactive)
-        (message "%s" answer)))
-    answer))
-
 (defun ip-query-asn-origin (ip)
   "Query for IP origin ASN."
   (interactive "sIP: ")
-  (let* ((reverse (reverse-ip ip))
+  (let* ((reverse (ip-query--reverse-ip ip))
          (result (ip-query--dns-cymru-txt-query (concat reverse ".origin.asn.cymru.com")))
          (answer))
     (message "%s" answer)
@@ -169,11 +176,41 @@ The authority zone will be included if present in the DNS response."
       (message "%s" answer))
     answer))
 
+(defun ip-query--message (answer)
+  "Output the ANSWER to the ip-query buffer."
+  (pop-to-buffer (ip-query-get-buffer))
+  (goto-char (point-min))
+  (insert "\n")
+  (insert (pp-to-string answer))
+  (backward-sexp))
+
+
+
+;;
+;; supplementary entry point(s)
+;;
+(defun ip-query-asn (asn)
+  "Query for an Autonomous System ASN."
+  (interactive "sASN: ")
+  (let* ((result (ip-query--dns-cymru-txt-query (concat "AS" asn ".asn.cymru.com")))
+         (answer nil))
+    (when result
+      (setq answer (list (list 'asn (nth 0 result))
+                         (list 'country (nth 1 result))
+                         (list 'rir (nth 2 result))
+                         (list 'name (nth 4 result))))
+      (ip-query--message answer)
+      (when (called-interactively-p 'interactive)
+        (message "%s" answer)))
+    answer))
+
+;; a helpful alias ...
+(defalias 'asn-query 'ip-query-asn)
+
 
 ;;
 ;; main entry point
 ;;
-
 (defun ip-query (ip)
   "Query information on an IP.
 Will return available DNS, BGP origin, and associated ASN information."
@@ -185,8 +222,8 @@ Will return available DNS, BGP origin, and associated ASN information."
     (setq answer (list (list 'dns dns)
                        (list 'origin origin)
                        (list 'asn asn)))
+    (ip-query--message answer)
     (when (called-interactively-p 'interactive)
-      (message "%s" answer))
-    answer))
+      (message "%s" answer))))
 
 ;;; ip-query.el ends here
