@@ -1,9 +1,17 @@
 #+TITLE: ip-query
 
-A set of functions to query information on an IP.
+A set of functions to query information on an IP.  Several functions depend upon
+the [[https://team-cymru.com/community-services/ip-asn-mapping/][IP to ASN Mapping Service]] provided by [[https://team-cymru.com/][Team Cymru]].
 
 * Usage
+Look up information about an IP.
 
 #+begin_src emacs-lisp
 (ip-query "1.1.1.1")
+#+end_src
+
+Look up information about an ASN.
+
+#+begin_src emacs-lisp
+(ip-query-asn "3356")
 #+end_src
