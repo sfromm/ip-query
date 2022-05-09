@@ -73,8 +73,6 @@
   :group 'ip-query
   (buffer-disable-undo)
   (read-only-mode -1)
-  (when (fboundp 'page-break-lines-mode)
-    (page-break-lines-mode))
   (setq-local font-lock-defaults '(ip-query-font-lock-keywords t))
   (when (featurep 'font-lock)
     (font-lock-set-defaults)))
