@@ -5,7 +5,7 @@
 ;; URL: https://github.com/sfromm/ip-query
 ;; Package-Requires: ((emacs "24.1"))
 ;; Keywords: network ip
-;; Version: 0.1
+;; Version: 0.2
 
 ;; This program is not part of GNU Emacs
 ;;
@@ -80,7 +80,7 @@
 (defun ip-query-exit ()
   "Bury ip-query output buffer."
   (interactive)
-  (quit-window (get-buffer ip-query-buffer-name)))
+  (quit-window))
 
 (defun ip-query-get-buffer ()
   "Get the ip-query buffer."
